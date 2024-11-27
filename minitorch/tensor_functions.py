@@ -411,7 +411,7 @@ def xavier(
         fan_in = fan_out = size**0.5  # Fallback for 1D tensors
 
     # Generate uniform random values
-    vals = [random.uniform(-1.0, 1.0) for _ in range(size)]
+    vals = [random.random() - 0.5 for _ in range(size)]
 
     # Calculate mean and adjust to zero
     mean = sum(vals) / size

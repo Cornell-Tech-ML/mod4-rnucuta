@@ -1,14 +1,11 @@
 from typing import Tuple, TypeVar, Any
 
-import numpy as np
 from numba import prange
 from numba import njit as _njit
 
 from .autodiff import Context
 from .tensor import Tensor
 from .tensor_data import (
-    MAX_DIMS,
-    Index,
     Shape,
     Strides,
     Storage,
@@ -22,6 +19,7 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
+    """Func to convert python func to cpu func"""
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
@@ -87,7 +85,7 @@ def _tensor_conv1d(
         and in_channels == in_channels_
         and out_channels == out_channels_
     )
-    
+
     # TODO: Implement for Task 4.1.
     for b in prange(batch_):
         # save to local thread
@@ -104,22 +102,12 @@ def _tensor_conv1d(
                         else:
                             input_pos = ow + kw_i
                         if 0 <= input_pos < width:
-                            input_index = (
-                                b * s1[0]
-                                + ic * s1[1]
-                                + input_pos * s1[2]
-                            )
-                            weight_index = (
-                                oc * s2[0]
-                                + ic * s2[1]
-                                + kw_i * s2[2]
-                            )
+                            input_index = b * s1[0] + ic * s1[1] + input_pos * s1[2]
+                            weight_index = oc * s2[0] + ic * s2[1] + kw_i * s2[2]
                             out_value += input[input_index] * weight[weight_index]
 
                 out_index = (
-                    b * out_strides[0]
-                    + oc * out_strides[1]
-                    + ow * out_strides[2]
+                    b * out_strides[0] + oc * out_strides[1] + ow * out_strides[2]
                 )
                 out[out_index] = out_value
 
@@ -289,10 +277,7 @@ def _tensor_conv2d(
                                         + input_w * s13
                                     )
                                     weight_idx = (
-                                        oc * s20
-                                        + ic * s21
-                                        + kh_i * s22
-                                        + kw_i * s23
+                                        oc * s20 + ic * s21 + kh_i * s22 + kw_i * s23
                                     )
                                     # Accumulate convolution result
                                     out_value += input[input_idx] * weight[weight_idx]
@@ -305,7 +290,6 @@ def _tensor_conv2d(
                         + ow * s_out_width
                     )
                     out[out_idx] = out_value
-    
 
 
 tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)

@@ -3,6 +3,7 @@ import random
 import embeddings
 
 import minitorch
+
 from datasets import load_dataset
 
 BACKEND = minitorch.TensorBackend(minitorch.FastOps)
@@ -12,15 +13,19 @@ def RParam(*shape):
     r = 0.1 * (minitorch.rand(shape, backend=BACKEND) - 0.5)
     return minitorch.Parameter(r)
 
+def XParam(*shape):
+    r = minitorch.xavier(shape, backend=BACKEND)
+    return minitorch.Parameter(r)
 
 class Linear(minitorch.Module):
     def __init__(self, in_size, out_size):
         super().__init__()
-        self.weights = RParam(in_size, out_size)
+        self.weights = XParam(in_size, out_size)
         self.bias = RParam(out_size)
         self.out_size = out_size
 
     def forward(self, x):
+        # print(x.shape)
         batch, in_size = x.shape
         return (
             x.view(batch, in_size) @ self.weights.value.view(in_size, self.out_size)
@@ -30,12 +35,14 @@ class Linear(minitorch.Module):
 class Conv1d(minitorch.Module):
     def __init__(self, in_channels, out_channels, kernel_width):
         super().__init__()
-        self.weights = RParam(out_channels, in_channels, kernel_width)
-        self.bias = RParam(1, out_channels, 1)
+        self.weights = XParam(out_channels, in_channels, kernel_width)
+        self.bias = XParam(1, out_channels, 1)
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # batch, width = input.shape
+        # return minitorch.conv1d(inputs, self.weights.value).view(batch, self.weights.shape[0], width) + self.bias.value
+        return minitorch.conv1d(input, self.weights.value) + self.bias.value
 
 
 class CNNSentimentKim(minitorch.Module):
@@ -62,15 +69,28 @@ class CNNSentimentKim(minitorch.Module):
         super().__init__()
         self.feature_map_size = feature_map_size
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.convA = Conv1d(embedding_size, feature_map_size, filter_sizes[0])
+        self.convB = Conv1d(embedding_size, feature_map_size, filter_sizes[1])
+        self.convC = Conv1d(embedding_size, feature_map_size, filter_sizes[2])
+        self.fullyC = Linear(feature_map_size, 1)
+        self.dropout = dropout
 
     def forward(self, embeddings):
         """
         embeddings tensor: [batch x sentence length x embedding dim]
         """
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
-
+        # print(embeddings.shape)
+        x = embeddings.permute(0, 2, 1)
+        xA = minitorch.max(self.convA.forward(x).relu(), 2)
+        xB = self.convB.forward(x).relu()
+        xC = self.convC.forward(x).relu()
+        # take mean along dim?
+        max_over_time = minitorch.max(xA, 2) + minitorch.max(xB, 2) + minitorch.max(xC, 2)
+        max_over_time = max_over_time.mean(2)
+        hidden = self.fullyC.forward(max_over_time.view(max_over_time.shape[0], max_over_time.shape[1]))
+        drop = minitorch.dropout(hidden, self.dropout, ignore = not self.training)
+        return drop.sigmoid()
 
 # Evaluation helper methods
 def get_predictions_array(y_true, model_output):
