@@ -57,7 +57,6 @@ def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
 
 
 # TODO: Implement for Task 4.3.
-# minitorch.avgpool2d(t, (2, 2))
 def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
     """Apply 2D average pooling to the input tensor.
 
@@ -75,6 +74,7 @@ def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
     avg_tensor = tiled_tensor.mean(dim=4)
     return avg_tensor.view(input.shape[0], input.shape[1], new_height, new_width)
 
+max_reduce = FastOps.reduce(operators.max, float('-inf'))
 
 def argmax(input: Tensor, dim: int) -> Tensor:
     """Compute the argmax along a specific dimension.
@@ -90,10 +90,7 @@ def argmax(input: Tensor, dim: int) -> Tensor:
     
     """
     max_values = input.f.max_reduce(input, dim)
-    one_hot = input.zeros(input.shape)
-    max_indices = input.f.eq_zip(input, max_values)
-    one_hot = one_hot.f.add_zip(one_hot, max_indices)
-    return one_hot
+    return max_values == input
 
 
 class Max(Function):
@@ -123,9 +120,7 @@ class Max(Function):
         return grad_output.f.mul_zip(grad_output, argmax(input, dim)), 0.0
 
 
-def max(input: Tensor, dim: int) -> Tensor:
-    """Apply the max reduction operation."""
-    return Max.apply(input, dim)
+max = Max.apply
 
 def softmax(input: Tensor, dim: int) -> Tensor:
     """Compute the softmax along a specific dimension.
@@ -140,7 +135,8 @@ def softmax(input: Tensor, dim: int) -> Tensor:
         Tensor with softmax applied.
 
     """
-    pass
+    exponentiated = input.exp()
+    return exponentiated / exponentiated.sum(dim)
 
 def logsoftmax(input: Tensor, dim: int) -> Tensor:
     """Compute the log of the softmax along a specific dimension.
@@ -155,8 +151,9 @@ def logsoftmax(input: Tensor, dim: int) -> Tensor:
         Tensor with log-softmax applied.
 
     """
-    pass
-
+    max_values = max(input, dim)
+    log_sum_exp = (input - max_values).exp().sum(dim).log()
+    return input - log_sum_exp
 
 def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
     """Apply 2D max pooling to the input tensor.
@@ -171,7 +168,10 @@ def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
         Tensor of size batch x channel x new_height x new_width after max pooling.
     
     """
-    pass
+    tiled_tensor, new_height, new_width = tile(input, kernel)
+    max_tensor = max(tiled_tensor, dim=4)
+    return max_tensor.view(input.shape[0], input.shape[1], new_height, new_width)
+
 
 def dropout(input: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
     """Apply dropout to the input tensor.
@@ -189,5 +189,5 @@ def dropout(input: Tensor, p: float = 0.5, training: bool = True) -> Tensor:
     """
     if not training:
         return input
-    mask = (rand(*input.shape) > p).to(input.dtype)
-    return input * mask / (1 - p)
+    mask = rand(input.shape) > p
+    return input * mask

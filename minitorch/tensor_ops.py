@@ -89,7 +89,7 @@ class TensorBackend:
 
         # Reduce
         self.add_reduce = ops.reduce(operators.add, 0.0)
-        self.max_reduce = ops.reduce(operators.max, float('-inf'))
+        # self.max_reduce = ops.reduce(operators.max, float('-inf'))
         self.mul_reduce = ops.reduce(operators.mul, 1.0)
         self.matrix_multiply = ops.matrix_multiply
         self.cuda = ops.cuda
