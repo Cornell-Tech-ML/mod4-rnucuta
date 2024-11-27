@@ -103,7 +103,7 @@ def argmax(input: Tensor, dim: int) -> Tensor:
 
 class Max(Function):
     @staticmethod
-    def forward(ctx: Context, input: Tensor, dim: int) -> Tensor:
+    def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
         """Apply the max operator along a specific dimension.
 
         Args:
@@ -123,7 +123,7 @@ class Max(Function):
         return max_values
 
     @staticmethod
-    def backward(ctx: Context, grad_output: Tensor) -> Tensor:
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
         """Compute the gradient of the max operation."""
         input, dim = ctx.saved_values
         return (grad_output * argmax(input, dim)), 0.0
