@@ -30,6 +30,7 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
+    """Jit compile a function for fast CPU execution."""
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
@@ -168,7 +169,39 @@ def tensor_map(
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # similar implementatino to standard tensor_map except with
+        # prange instead of range
+        # Main loop in parallel
+        # All indices use numpy buffers
+        if len(out_shape) > MAX_DIMS or len(in_shape) > MAX_DIMS:
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        # When out and in are stride-aligned, avoid indexing
+        if (
+            len(out_shape) == len(in_shape)
+            and len(out_strides) == len(in_strides)
+            and (out_shape == in_shape).all()
+            and (out_strides == in_strides).all()
+        ):
+            for i in prange(len(out)):
+                out[i] = fn(in_storage[i])
+
+        else:
+            for i in prange(len(out)):
+                out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+                in_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+                # Convert flat index to multidimensional index
+                # to_index function is useful just for getting
+                # continous set of indices
+                to_index(i, out_shape, out_index)
+
+                broadcast_index(out_index, out_shape, in_shape, in_index)
+
+                # ordinals
+                in_position = index_to_position(in_index, in_strides)
+                out_position = index_to_position(out_index, out_strides)
+
+                out[out_position] = fn(in_storage[in_position])
 
     return njit(_map, parallel=True)  # type: ignore
 
@@ -207,7 +240,47 @@ def tensor_zip(
         b_shape: Shape,
         b_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # similar implementatino to standard tensor_zip except with
+        # prange instead of range
+        if (
+            len(out_shape) > MAX_DIMS
+            or len(a_shape) > MAX_DIMS
+            or len(b_shape) > MAX_DIMS
+        ):
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        n = len(out)
+        if (
+            len(out_strides) == len(a_strides)
+            and len(out_shape) == len(a_shape)
+            and len(a_strides) == len(b_strides)
+            and len(b_shape) == len(a_shape)
+            and (out_strides == a_strides).all()
+            and (a_strides == b_strides).all()
+            and (out_shape == a_shape).all()
+            and (a_shape == b_shape).all()
+        ):
+            for i in prange(n):
+                out[i] = fn(a_storage[i], b_storage[i])
+        else:
+            # global broacasting case
+            for i in prange(n):
+                out_index = np.empty(MAX_DIMS, dtype=np.int32)
+                in_index_a = np.empty(MAX_DIMS, dtype=np.int32)
+                in_index_b = np.empty(MAX_DIMS, dtype=np.int32)
+                to_index(i, out_shape, out_index)
+
+                broadcast_index(out_index, out_shape, a_shape, in_index_a)
+                broadcast_index(out_index, out_shape, b_shape, in_index_b)
+
+                # Calculate ordinals
+                in_position_a = index_to_position(in_index_a, a_strides)
+                in_position_b = index_to_position(in_index_b, b_strides)
+                out_position = index_to_position(out_index, out_strides)
+
+                out[out_position] = fn(
+                    a_storage[in_position_a], b_storage[in_position_b]
+                )
 
     return njit(_zip, parallel=True)  # type: ignore
 
@@ -242,7 +315,25 @@ def tensor_reduce(
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # similar implementatino to standard tensor_reduce except with
+        # prange instead of range
+        if len(out_shape) > MAX_DIMS or len(a_shape) > MAX_DIMS:
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        for i in prange(len(out)):
+            out_index: Index = np.empty(MAX_DIMS, dtype=np.int32)
+            reduce_size: int = a_shape[reduce_dim]
+            to_index(i, out_shape, out_index)
+            output_position = index_to_position(out_index, out_strides)
+
+            reduce_stride = a_strides[reduce_dim]
+            baseIdx = index_to_position(out_index, a_strides)
+            acc = out[output_position]
+            for j in range(reduce_size):
+                a_position = baseIdx + j * reduce_stride
+                acc = fn(acc, float(a_storage[a_position]))
+
+            out[output_position] = acc
 
     return njit(_reduce, parallel=True)  # type: ignore
 
@@ -290,10 +381,25 @@ def _tensor_matrix_multiply(
         None : Fills in `out`
 
     """
+    assert a_shape[-1] == b_shape[-2], "a_shape[-1] != b_shape[-2]"
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
-
-    raise NotImplementedError("Need to include this file from past assignment.")
+    out_batch_stride = out_strides[0] if out_shape[0] > 1 else 0
+    for batch in prange(out_shape[0]):
+        batch_idx_a = batch * a_batch_stride
+        batch_idx_b = batch * b_batch_stride
+        out_batch_idx = batch * out_batch_stride
+        for r in range(out_shape[-2]):
+            for c in range(out_shape[-1]):
+                acc = 0.0
+                for i in range(a_shape[-1]):  # want to do the inner loop before col
+                    # like BLAS implementation to be more cache friendly,
+                    # but this causes global writes
+                    acc += (
+                        a_storage[batch_idx_a + r * a_strides[-2] + i * a_strides[-1]]
+                        * b_storage[batch_idx_b + i * b_strides[-2] + c * b_strides[-1]]
+                    )
+                out[out_batch_idx + r * out_strides[-2] + c * out_strides[-1]] = acc
 
 
 tensor_matrix_multiply = njit(_tensor_matrix_multiply, parallel=True)

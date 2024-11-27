@@ -15,6 +15,7 @@ class SGD(Optimizer):
         self.lr = lr
 
     def zero_grad(self) -> None:
+        """When zero_grad is set, remove all grad flags from derivatives and grads"""
         for p in self.parameters:
             if p.value is None:
                 continue
@@ -26,6 +27,7 @@ class SGD(Optimizer):
                     p.value.grad = None
 
     def step(self) -> None:
+        """Step in optimizer for each step. Simply updates weights by grad/deriv."""
         for p in self.parameters:
             if p.value is None:
                 continue
