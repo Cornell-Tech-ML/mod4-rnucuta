@@ -83,14 +83,15 @@ class CNNSentimentKim(minitorch.Module):
         # print(embeddings.shape)
         x = embeddings.permute(0, 2, 1)
         xA = minitorch.max(self.convA.forward(x).relu(), 2)
-        xB = self.convB.forward(x).relu()
-        xC = self.convC.forward(x).relu()
+        xB = minitorch.max(self.convB.forward(x).relu(), 2)
+        xC = minitorch.max(self.convC.forward(x).relu(), 2)
         # take mean along dim?
-        max_over_time = minitorch.max(xA, 2) + minitorch.max(xB, 2) + minitorch.max(xC, 2)
-        max_over_time = max_over_time.mean(2)
-        hidden = self.fullyC.forward(max_over_time.view(max_over_time.shape[0], max_over_time.shape[1]))
-        drop = minitorch.dropout(hidden, self.dropout, ignore = not self.training)
-        return drop.sigmoid()
+        max_over_time = xA + xB + xC
+        # max_over_time = minitorch.max(xA, 2) + minitorch.max(xB, 2) + minitorch.max(xC, 2)
+        # max_over_time = max_over_time.mean(2)
+        h = self.fullyC.forward(max_over_time.view(max_over_time.shape[0], max_over_time.shape[1]))
+        h = minitorch.dropout(h, self.dropout, ignore = not self.training)
+        return h.sigmoid().view(embeddings.shape[0])
 
 # Evaluation helper methods
 def get_predictions_array(y_true, model_output):

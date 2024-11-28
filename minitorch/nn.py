@@ -41,25 +41,13 @@ def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
 
     tiled_tensor = (
         input.contiguous()
-        .view(batch, channel, new_height, kh, new_width, kw)
-        .permute(0, 1, 2, 4, 3, 5)
+        .view(batch, channel, height, new_width, kw)
+        .permute(0, 1, 3, 2, 4)
         .contiguous()
         .view(batch, channel, new_height, new_width, kh * kw)
     )
 
     return tiled_tensor, new_height, new_width
-
-    # tiled_tensor = input.zeros((batch, channel, new_height, new_width, kh * kw))
-
-    # # modified "view" on tensor
-    # for b in range(batch):
-    #     for c in range(channel):
-    #         for h in range(new_height):
-    #             for w in range(new_width):
-    #                 # Fill the new tensor with the appropriate values from the input tensor
-    #                 tiled_tensor[b, c, h, w] = input[b, c, h * kh:(h + 1) * kh, w * kw:(w + 1) * kw].reshape(-1)
-
-    # return tiled_tensor, new_height, new_width
 
 
 # TODO: Implement for Task 4.3.
@@ -118,8 +106,8 @@ class Max(Function):
 
         """
         dim = int(dim.item())
-        max_values = max_reduce(input, dim)
         ctx.save_for_backward(input, dim)
+        max_values = max_reduce(input, dim)
         return max_values
 
     @staticmethod

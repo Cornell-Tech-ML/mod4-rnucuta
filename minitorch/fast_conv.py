@@ -98,7 +98,7 @@ def _tensor_conv1d(
                 for ic in range(in_channels):
                     for kw_i in range(kw):
                         if reverse:
-                            input_pos = ow - kw_i
+                            input_pos = ow - kw + 1 + kw_i
                         else:
                             input_pos = ow + kw_i
                         if 0 <= input_pos < width:
@@ -261,8 +261,8 @@ def _tensor_conv2d(
                             for kw_i in range(kw):  # Iterate over kernel width
                                 # Compute input indices based on reverse flag
                                 if reverse:
-                                    input_h = oh - kh_i
-                                    input_w = ow - kw_i
+                                    input_h = oh - kh + 1 + kh_i
+                                    input_w = ow - kw + 1 + kw_i
                                 else:
                                     input_h = oh + kh_i
                                     input_w = ow + kw_i
