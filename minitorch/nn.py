@@ -105,16 +105,15 @@ class Max(Function):
             Tensor containing the max values along the specified dimension.
 
         """
-        dim = int(dim.item())
-        ctx.save_for_backward(input, dim)
         max_values = max_reduce(input, dim)
+        ctx.save_for_backward(input, int(dim.item()))    
         return max_values
 
     @staticmethod
-    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
         """Compute the gradient of the max operation."""
         input, dim = ctx.saved_values
-        return (grad_output * argmax(input, dim)), 0.0
+        return grad_output * argmax(input, int(dim.item())), 0.0
 
 
 def _max(input: Tensor, dim: int) -> Tensor:

@@ -20,7 +20,7 @@ def XParam(*shape):
 class Linear(minitorch.Module):
     def __init__(self, in_size, out_size):
         super().__init__()
-        self.weights = XParam(in_size, out_size)
+        self.weights = RParam(in_size, out_size)
         self.bias = RParam(out_size)
         self.out_size = out_size
 
@@ -35,8 +35,8 @@ class Linear(minitorch.Module):
 class Conv1d(minitorch.Module):
     def __init__(self, in_channels, out_channels, kernel_width):
         super().__init__()
-        self.weights = XParam(out_channels, in_channels, kernel_width)
-        self.bias = XParam(1, out_channels, 1)
+        self.weights = RParam(out_channels, in_channels, kernel_width)
+        self.bias = RParam(1, out_channels, 1)
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
