@@ -105,8 +105,8 @@ class Max(Function):
             Tensor containing the max values along the specified dimension.
 
         """
-        max_values = max_reduce(input, dim)
-        ctx.save_for_backward(input, int(dim.item()))    
+        max_values = max_reduce(input, int(dim.item()))
+        ctx.save_for_backward(input, dim)    
         return max_values
 
     @staticmethod
