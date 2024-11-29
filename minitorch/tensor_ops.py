@@ -41,7 +41,9 @@ class TensorOps:
     @staticmethod
     def reduce(
         fn: Callable[[float, float], float], start: float = 0.0
-    ) -> Callable[[Tensor, int], Tensor]: ...
+    ) -> Callable[[Tensor, int], Tensor]:
+        """Reduce placeholder"""
+        ...
 
     @staticmethod
     def matrix_multiply(a: Tensor, b: Tensor) -> Tensor:
@@ -57,10 +59,12 @@ class TensorBackend:
         that implements map, zip, and reduce higher-order functions.
 
         Args:
+        ----
             ops : tensor operations object see `tensor_ops.py`
 
 
         Returns:
+        -------
             A collection of tensor functions
 
         """
@@ -85,6 +89,7 @@ class TensorBackend:
 
         # Reduce
         self.add_reduce = ops.reduce(operators.add, 0.0)
+        # self.max_reduce = ops.reduce(operators.max, float('-inf'))
         self.mul_reduce = ops.reduce(operators.mul, 1.0)
         self.matrix_multiply = ops.matrix_multiply
         self.cuda = ops.cuda
@@ -112,12 +117,14 @@ class SimpleOps(TensorOps):
                     out[i, j] = fn(a[i, 0])
 
         Args:
+        ----
             fn: function from float-to-float to apply.
             a (:class:`TensorData`): tensor to map over
             out (:class:`TensorData`): optional, tensor data to fill in,
                    should broadcast with `a`
 
         Returns:
+        -------
             new tensor data
 
         """
@@ -154,11 +161,13 @@ class SimpleOps(TensorOps):
 
 
         Args:
+        ----
             fn: function from two floats-to-float to apply
             a (:class:`TensorData`): tensor to zip over
             b (:class:`TensorData`): tensor to zip over
 
         Returns:
+        -------
             :class:`TensorData` : new tensor data
 
         """
@@ -193,11 +202,14 @@ class SimpleOps(TensorOps):
 
 
         Args:
+        ----
             fn: function from two floats-to-float to apply
             a (:class:`TensorData`): tensor to reduce over
+            start (float): initial value of all out elements
             dim (int): int of dim to reduce
 
         Returns:
+        -------
             :class:`TensorData` : new tensor
 
         """
@@ -218,7 +230,17 @@ class SimpleOps(TensorOps):
 
     @staticmethod
     def matrix_multiply(a: "Tensor", b: "Tensor") -> "Tensor":
-        """Matrix multiplication"""
+        """Matrix multiplication - SLOW version"""
+        # assumption is that shape given is 3d of dimensions (x, y), (y, z)
+        # view as (y, x, 1), (y, 1, z)
+        # assert a_shape[-1] == b_shape[-2]
+        # o, p = a.shape[0], b.shape[1]
+        # a_t = a.view([1] + list(a.shape)).permute(range(len(a.shape), -1, -1))
+        # b_v = b.view(b.shape[0], 1, b.shape[1])
+
+        # intermediate = (b_v * a_t).sum(0).view(o, p)
+        # return intermediate
+        # pass
         raise NotImplementedError("Not implemented in this assignment")
 
     is_cuda = False
@@ -246,9 +268,11 @@ def tensor_map(
       broadcast. (`in_shape` must be smaller than `out_shape`).
 
     Args:
+    ----
         fn: function from float-to-float to apply
 
     Returns:
+    -------
         Tensor map function.
 
     """
@@ -261,7 +285,37 @@ def tensor_map(
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        if len(out_shape) > MAX_DIMS or len(in_shape) > MAX_DIMS:
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        # Create index arrays
+        out_index: Index = np.zeros(len(out_shape), dtype=np.int32)
+        in_index: Index = np.zeros(len(in_shape), dtype=np.int32)
+
+        # can assume strides are equivalent
+        # as we are assuming contiguous property
+        # counter example array (2,5) stride (1,2)
+        # from being transposed. Stride != (5,1)
+        # to avoid issue, just use global method otherwise
+        if (out_shape == in_shape).all() and (out_strides == in_strides).all():
+            for i in range(len(out)):
+                out[i] = fn(in_storage[i])
+            return
+
+        # Iterate through the output tensor
+        for i in range(len(out)):
+            # Convert flat index to multidimensional index
+            # to_index function is useful just for getting
+            # continous set of indices
+            to_index(i, out_shape, out_index)
+
+            broadcast_index(out_index, out_shape, in_shape, in_index)
+
+            # Calculate ordinals
+            in_position = index_to_position(in_index, in_strides)
+            out_position = index_to_position(out_index, out_strides)
+
+            out[out_position] = fn(in_storage[in_position])
 
     return _map
 
@@ -287,9 +341,11 @@ def tensor_zip(
       and `b_shape` broadcast to `out_shape`.
 
     Args:
+    ----
         fn: function mapping two floats to float to apply
 
     Returns:
+    -------
         Tensor zip function.
 
     """
@@ -305,7 +361,47 @@ def tensor_zip(
         b_shape: Shape,
         b_strides: Strides,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        if (
+            len(out_shape) > MAX_DIMS
+            or len(a_shape) > MAX_DIMS
+            or len(b_shape) > MAX_DIMS
+        ):
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        out_index: Index = np.zeros(len(out_shape), dtype=np.int32)
+        in_index_a: Index = np.zeros(len(a_shape), dtype=np.int32)
+        in_index_b: Index = np.zeros(len(b_shape), dtype=np.int32)
+        equal_strides: bool = (out_strides == a_strides).all() and (
+            a_strides == b_strides
+        ).all()
+        if (out_shape == a_shape).all() and (a_shape == b_shape).all():
+            for i in range(len(out)):
+                to_index(i, out_shape, out_index)
+                if not equal_strides:
+                    in_position_a = index_to_position(out_index, a_strides)
+                    in_position_b = index_to_position(out_index, b_strides)
+                    out_position = index_to_position(out_index, out_strides)
+
+                    out[out_position] = fn(
+                        a_storage[in_position_a], b_storage[in_position_b]
+                    )
+                else:
+                    out[i] = fn(a_storage[i], b_storage[i])
+            return
+
+        # global broacasting case
+        for i in range(len(out)):
+            to_index(i, out_shape, out_index)
+
+            broadcast_index(out_index, out_shape, a_shape, in_index_a)
+            broadcast_index(out_index, out_shape, b_shape, in_index_b)
+
+            # Calculate ordinals
+            in_position_a = index_to_position(in_index_a, a_strides)
+            in_position_b = index_to_position(in_index_b, b_strides)
+            out_position = index_to_position(out_index, out_strides)
+
+            out[out_position] = fn(a_storage[in_position_a], b_storage[in_position_b])
 
     return _zip
 
@@ -319,9 +415,11 @@ def tensor_reduce(
        except with `reduce_dim` turned to size `1`
 
     Args:
+    ----
         fn: reduction function mapping two floats to float
 
     Returns:
+    -------
         Tensor reduce function.
 
     """
@@ -335,7 +433,25 @@ def tensor_reduce(
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # dont need to recompute each index
+        # since broadcasting is clearly confided
+        # to one dimension
+        if len(out_shape) > MAX_DIMS or len(a_shape) > MAX_DIMS:
+            raise ValueError(f"Tensor dimensions cannot exceed {MAX_DIMS}")
+
+        a_index: Index = np.zeros(len(out_shape), dtype=np.int32)
+        reduce_size: int = a_shape[reduce_dim]
+
+        for i in range(len(out)):
+            to_index(i, out_shape, a_index)
+            accumulator = out[i]
+
+            for j in range(reduce_size):
+                a_index[reduce_dim] = j
+                a_position = index_to_position(a_index, a_strides)
+                accumulator = fn(accumulator, a_storage[a_position])
+
+            out[i] = accumulator
 
     return _reduce
 

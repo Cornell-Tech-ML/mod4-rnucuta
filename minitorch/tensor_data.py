@@ -37,14 +37,21 @@ def index_to_position(index: Index, strides: Strides) -> int:
     storage based on strides.
 
     Args:
+    ----
         index : index tuple of ints
         strides : tensor strides
 
     Returns:
+    -------
         Position in storage
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    # assert len(index) == len(strides)
+    # return sum(ind * stride for ind, stride in zip(index, strides))
+    position = 0
+    for ind, stride in zip(index, strides):
+        position += ind * stride
+    return position
 
 
 def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
@@ -54,12 +61,32 @@ def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
     may not be the inverse of `index_to_position`.
 
     Args:
+    ----
         ordinal: ordinal position to convert.
         shape : tensor shape.
         out_index : return index corresponding to position.
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    # stride = strides_from_shape(list(shape))
+    # if isinstance(stride, tuple):
+    #     for i in range(len(stride)):
+    #         out_index[i] = (ordinal // stride[i]) % shape[i]
+    # else:
+    #     out_index[0] = ordinal
+    curr_ord = ordinal + 0
+    for i in range(len(shape) - 1, -1, -1):
+        sh = shape[i]
+        out_index[i] = curr_ord % sh
+        curr_ord = curr_ord // sh
+    # start = False
+    # curr_ord = ordinal + 0
+    # for i in range(len(shape) - 1, -1, -1):
+    #     sh = shape[i]
+    #     if not start and sh > 0:
+    #         start = True
+    #     if start:
+    #         out_index[i] = curr_ord % sh
+    #         curr_ord = curr_ord // sh
 
 
 def broadcast_index(
@@ -72,33 +99,104 @@ def broadcast_index(
     removed.
 
     Args:
+    ----
         big_index : multidimensional index of bigger tensor
         big_shape : tensor shape of bigger tensor
         shape : tensor shape of smaller tensor
         out_index : multidimensional index of smaller tensor
 
     Returns:
+    -------
         None
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    # Initialize the out_index to zero
+    # out_index[:] = 0
+
+    # pad = len(big_shape) - len(shape)
+
+    # # Assumption: big_shap is post-broadcasted dim
+    # # Loop over each dimension in the smaller tensor's shape
+    # for i in range(len(shape)):
+    #     # Corresponding dimension in the big tensor
+    #     if shape[i] == 1:
+    #         # If the dimension is broadcasted (size 1), index is always 0
+    #         out_index[i] = 0
+    #     else:
+    #         big_dim = pad + i
+    #         # Otherwise, take the index from the big tensor
+    #         out_index[i] = big_index[big_dim]
+    for i, s in enumerate(shape):
+        if s > 1:
+            out_index[i] = big_index[i + len(big_shape) - len(shape)]
+        else:
+            out_index[i] = 0
+    return None
 
 
 def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
     """Broadcast two shapes to create a new union shape.
 
     Args:
+    ----
         shape1 : first shape
         shape2 : second shape
 
     Returns:
+    -------
         broadcasted shape
 
     Raises:
+    ------
         IndexingError : if cannot broadcast
 
     """
-    raise NotImplementedError("Need to include this file from past assignment.")
+    # rules: at least one dim, and going from last to first, comparable dims must be equal, one must be size 1, or dim does not exist
+    # print(shape1)
+    # print(shape2)
+    # if len(shape1) < 1 or len(shape2) < 1:  # can't broadcast
+    #     raise IndexingError(
+    #         "Shapes cannot be broadcasted. One of the tensors doesn't have dim{}{}".format(
+    #             shape1, shape2
+    #         )
+    #     )
+
+    # i = len(shape1) - 1
+    # j = len(shape2) - 1
+
+    # return_shape = []
+    # while i >= 0 or j >= 0:
+    #     if i >= 0 and j >= 0:
+    #         if shape1[i] != shape2[j] and (shape1[i] != 1 and shape2[j] != 1):
+    #             raise IndexingError(f"Shapes cannot be broadcasted on axis {max(i, j)}")
+    #         return_shape.append(max(shape1[i], shape2[j]))
+    #         i -= 1
+    #         j -= 1
+    #     elif i >= 0:
+    #         return_shape.append(shape1[i])
+    #         i -= 1
+    #     else:
+    #         return_shape.append(shape2[j])
+    #         j -= 1
+
+    # return tuple(return_shape[::-1])
+    a, b = shape1, shape2
+    m = max(len(a), len(b))
+    c_rev = [0] * m
+    a_rev = list(reversed(a))
+    b_rev = list(reversed(b))
+    for i in range(m):
+        if i >= len(a):
+            c_rev[i] = b_rev[i]
+        elif i >= len(b):
+            c_rev[i] = a_rev[i]
+        else:
+            c_rev[i] = max(a_rev[i], b_rev[i])
+            if a_rev[i] != c_rev[i] and a_rev[i] != 1:
+                raise IndexingError(f"Broadcast failure {a} {b}")
+            if b_rev[i] != c_rev[i] and b_rev[i] != 1:
+                raise IndexingError(f"Broadcast failure {a} {b}")
+    return tuple(reversed(c_rev))
 
 
 def strides_from_shape(shape: UserShape) -> UserStrides:
@@ -153,7 +251,8 @@ class TensorData:
     def is_contiguous(self) -> bool:
         """Check that the layout is contiguous, i.e. outer dimensions have bigger strides than inner dimensions.
 
-        Returns:
+        Returns
+        -------
             bool : True if contiguous
 
         """
@@ -166,9 +265,21 @@ class TensorData:
 
     @staticmethod
     def shape_broadcast(shape_a: UserShape, shape_b: UserShape) -> UserShape:
+        """Static method that calls the global shape_broadcast method"""
         return shape_broadcast(shape_a, shape_b)
 
     def index(self, index: Union[int, UserIndex]) -> int:
+        """Converts index to ordinal position
+
+        Inputs:
+        Args:
+            index : int if vector, userindex is matrice
+
+        Returns
+        -------
+            int : ordinal position
+
+        """
         if isinstance(index, int):
             aindex: Index = array([index])
         else:  # if isinstance(index, tuple):
@@ -192,6 +303,7 @@ class TensorData:
         return index_to_position(array(index), self._strides)
 
     def indices(self) -> Iterable[UserIndex]:
+        """Yields indice at each ordinal position"""
         lshape: Shape = array(self.shape)
         out_index: Index = array(self.shape)
         for i in range(self.size):
@@ -203,10 +315,12 @@ class TensorData:
         return tuple((random.randint(0, s - 1) for s in self.shape))
 
     def get(self, key: UserIndex) -> float:
+        """Gets element from storage given normal indice tuple"""
         x: float = self._storage[self.index(key)]
         return x
 
     def set(self, key: UserIndex, val: float) -> None:
+        """Sets element in storage given normal indice tuple"""
         self._storage[self.index(key)] = val
 
     def tuple(self) -> Tuple[Storage, Shape, Strides]:
@@ -217,17 +331,34 @@ class TensorData:
         """Permute the dimensions of the tensor.
 
         Args:
+        ----
             *order: a permutation of the dimensions
 
         Returns:
+        -------
             New `TensorData` with the same storage and a new dimension order.
 
         """
+        # assert list(sorted(order)) == list(
+        #     range(len(self.shape))
+        # ), f"Must give a position to each dimension. Shape: {self.shape} Order: {order}"
+
+        # new_shape = tuple(self.shape[int(i)] for i in order)
+        # if self.strides:
+        #     new_stride = tuple(self.strides[int(i)] for i in order)
+        # else:
+        #     new_stride = strides_from_shape(new_shape)
+
+        # return TensorData(self._storage, new_shape, new_stride)
         assert list(sorted(order)) == list(
             range(len(self.shape))
         ), f"Must give a position to each dimension. Shape: {self.shape} Order: {order}"
 
-        raise NotImplementedError("Need to include this file from past assignment.")
+        return TensorData(
+            self._storage,
+            tuple([self.shape[o] for o in order]),
+            tuple([self._strides[o] for o in order]),
+        )
 
     def to_string(self) -> str:
         """Convert to string"""
