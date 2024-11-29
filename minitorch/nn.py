@@ -106,7 +106,7 @@ class Max(Function):
 
         """
         max_values = max_reduce(input, int(dim.item()))
-        ctx.save_for_backward(input, dim)    
+        ctx.save_for_backward(input, dim)
         return max_values
 
     @staticmethod
