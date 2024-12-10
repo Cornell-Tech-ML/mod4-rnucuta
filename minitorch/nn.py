@@ -137,6 +137,8 @@ def softmax(input: Tensor, dim: int) -> Tensor:
         Tensor with softmax applied.
 
     """
+    # exp = input.exp()
+    # return exp / exp.sum(dim)
     max_values = max(input, dim)
     exponentiated = (input - max_values).exp()
     acc = exponentiated.sum(dim)
