@@ -19,12 +19,17 @@ def RParam(*shape):
     r = 0.1 * (minitorch.rand(shape, backend=BACKEND) - 0.5)
     return minitorch.Parameter(r)
 
+def XParam(*shape):
+    r = minitorch.xavier(shape, backend=BACKEND)
+    return minitorch.Parameter(r)
+
 
 class Linear(minitorch.Module):
     def __init__(self, in_size, out_size):
         super().__init__()
         self.weights = RParam(in_size, out_size)
         self.bias = RParam(out_size)
+        #self.bias.value = self.bias.value.view(out_size)
         self.out_size = out_size
 
     def forward(self, x):
@@ -42,7 +47,7 @@ class Conv2d(minitorch.Module):
 
     def forward(self, input):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        return minitorch.conv2d(input, self.weights.value) + self.bias.value
 
 
 class Network(minitorch.Module):
@@ -68,11 +73,21 @@ class Network(minitorch.Module):
         self.out = None
 
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.convA = Conv2d(1, 4, 3, 3)
+        self.convB = Conv2d(4, 8, 3, 3)
+        self.fullyC = Linear(392, 64)
+        self.finalFullyC = Linear(64, C)
 
     def forward(self, x):
         # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        # x = x.view(-1, 1, H, W)
+        self.mid = self.convA.forward(x).relu()
+        self.out = self.convB.forward(self.mid).relu()
+        pool = minitorch.avgpool2d(self.out, (4, 4)).view(BATCH, 392)
+        h = self.fullyC.forward(pool).relu()
+        h = minitorch.dropout(h, 0.25, ignore = not self.training)
+        h = self.finalFullyC.forward(h)
+        return minitorch.logsoftmax(h, dim = 1)
 
 
 def make_mnist(start, stop):
